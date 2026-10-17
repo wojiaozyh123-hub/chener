@@ -9,7 +9,7 @@ import { buildDiagram, type Diagram } from './layout/diagram.js';
 import { layoutModel, type LayoutReport } from './layout/index.js';
 import { checkEvidence, checkGeometry, checkLedger, summarize, type CheckReport } from './check/verify.js';
 import { convert } from './model/convert.js';
-import { applyOps, type Op } from './model/ops.js';
+import { applyOps, type Actor, type Op } from './model/ops.js';
 import { emptyDecisions, type Decisions, type Ledger, type Model, type Pending } from './model/types.js';
 import { defaultStyle, type View } from './model/view.js';
 import { renderDrawio } from './render/drawio.js';
@@ -136,11 +136,11 @@ export async function generate(inputs: string[], file: string, opts: GenerateOpt
  */
 export type LayoutMode = 'none' | 'keep' | 'full' | 'auto';
 
-export function applyOpsInMemory(file: string, project: ProjectFile, ops: Op[], mode: LayoutMode = 'auto'): { state: State | null; errors: string[] } {
+export function applyOpsInMemory(file: string, project: ProjectFile, ops: Op[], mode: LayoutMode = 'auto', actor: Actor = 'user'): { state: State | null; errors: string[] } {
   const conv = convert(project.facts, project.decisions);
   const decisions = structuredClone(project.decisions);
   const view = structuredClone(project.view);
-  const r = applyOps(decisions, view, conv.model, ops);
+  const r = applyOps(decisions, view, conv.model, ops, actor);
   if (r.errors.length) return { state: null, errors: r.errors };
   const next: ProjectFile = { ...project, decisions, view };
   let m = mode;
@@ -157,10 +157,10 @@ export function applyOpsInMemory(file: string, project: ProjectFile, ops: Op[], 
   return { state: m === 'none' ? evaluate(file, next) : relayout(file, next, m === 'keep'), errors: [] };
 }
 
-/** 应用一批操作：全部成功才写入。relayoutAfter：true 全部重排，false 不排，不写按 auto。 */
+/** 命令行和 MCP 的修改（算 agent 做的）：全部成功才写入。relayoutAfter：true 全部重排，false 不排，不写按 auto。 */
 export function applyOpsToProject(file: string, ops: Op[], relayoutAfter?: boolean): { state: State | null; errors: string[] } {
   const abs = path.resolve(file);
-  return applyOpsInMemory(abs, loadProject(abs), ops, relayoutAfter === undefined ? 'auto' : relayoutAfter ? 'full' : 'none');
+  return applyOpsInMemory(abs, loadProject(abs), ops, relayoutAfter === undefined ? 'auto' : relayoutAfter ? 'full' : 'none', 'agent');
 }
 
 /** 读回 draw.io 里的修改（位置、名字、形状、字体、基数、虚线），不重新排布。 */

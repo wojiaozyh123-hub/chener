@@ -104,6 +104,7 @@ export interface ExtraRelationship {
   identifying?: boolean;
   evidence?: Evidence[];
   assertedBy?: 'user';
+  confirmed?: boolean; // 用户在推断项清单里点过“留”
 }
 
 export interface Decisions {
@@ -115,10 +116,11 @@ export interface Decisions {
   cards: Record<string, string>; // 关系id#端序号 → 基数文本
   flags: Record<string, Partial<{ key: boolean; partialKey: boolean; multivalued: boolean; derived: boolean; weak: boolean; identifying: boolean; dashed: boolean }>>;
   extraRelationships: ExtraRelationship[];
+  agentLabels: string[]; // agent（MCP / 命令行）起的名字，用户还没确认；用户自己改的名不在这里
 }
 
 export function emptyDecisions(): Decisions {
-  return { labels: {}, tableRoles: {}, links: {}, unlinks: [], exclusions: {}, cards: {}, flags: {}, extraRelationships: [] };
+  return { labels: {}, tableRoles: {}, links: {}, unlinks: [], exclusions: {}, cards: {}, flags: {}, extraRelationships: [], agentLabels: [] };
 }
 
 export interface ConvertResult {

@@ -30,7 +30,13 @@ export type Op =
   | { op: 'set_style'; id?: string; kind?: 'entity' | 'relationship' | 'attribute' | 'card'; fontFamily?: string; fontSize?: number; bold?: boolean; cardCase?: 'upper' | 'lower' }
   | { op: 'move'; id: string; x: number; y: number }
   | { op: 'place'; id: string; x: number; y: number }
-  | { op: 'reset_style'; id?: string; props?: ('fontFamily' | 'fontSize' | 'bold' | 'shape')[] };
+  | { op: 'reset_style'; id?: string; props?: ('fontFamily' | 'fontSize' | 'bold' | 'shape')[] }
+  | { op: 'reset_label'; id: string }
+  | { op: 'confirm_label'; id: string }
+  | { op: 'confirm_relationship'; id: string };
+
+/** 谁做的修改：agent（MCP、命令行）起的名字会进推断项清单等用户确认；用户自己改的不进。 */
+export type Actor = 'agent' | 'user';
 
 export interface OpsResult {
   errors: string[];
@@ -43,7 +49,8 @@ function slug(s: string): string {
 }
 
 /** 在当前模型上应用一批操作（模型用来检查 id 是否存在）。 */
-export function applyOps(d: Decisions, view: View, model: Model, ops: Op[]): OpsResult {
+export function applyOps(d: Decisions, view: View, model: Model, ops: Op[], actor: Actor = 'user'): OpsResult {
+  d.agentLabels ??= [];
   const errors: string[] = [];
   let applied = 0;
   let structural = false;
@@ -64,8 +71,27 @@ export function applyOps(d: Decisions, view: View, model: Model, ops: Op[]): Ops
         if (!nodeIds.has(op.id)) return fail(`找不到 ${op.id}`);
         if (!op.label.trim()) return fail('名字不能为空');
         d.labels[op.id] = op.label.trim();
+        d.agentLabels = d.agentLabels.filter((x) => x !== op.id);
+        if (actor === 'agent') d.agentLabels.push(op.id);
         structural = true;
         break;
+      case 'reset_label':
+        if (!nodeIds.has(op.id)) return fail(`找不到 ${op.id}`);
+        delete d.labels[op.id];
+        d.agentLabels = d.agentLabels.filter((x) => x !== op.id);
+        structural = true;
+        break;
+      case 'confirm_label':
+        if (actor === 'agent') return fail('推断项只能由用户在编辑器里确认');
+        d.agentLabels = d.agentLabels.filter((x) => x !== op.id);
+        break;
+      case 'confirm_relationship': {
+        if (actor === 'agent') return fail('推断项只能由用户在编辑器里确认');
+        const x = d.extraRelationships.find((e) => e.id === op.id);
+        if (!x) return fail(`找不到后加的关系 ${op.id}`);
+        x.confirmed = true;
+        break;
+      }
       case 'set_card': {
         const r = relById.get(op.relationship);
         if (!r) return fail(`找不到关系 ${op.relationship}`);

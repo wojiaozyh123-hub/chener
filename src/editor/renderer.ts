@@ -24,6 +24,8 @@ const pFamily = $<HTMLInputElement>('pFamily');
 const pSize = $<HTMLInputElement>('pSize');
 const pBold = $<HTMLInputElement>('pBold');
 const pShape = $<HTMLSelectElement>('pShape');
+const inferredPanel = $<HTMLDivElement>('inferred');
+let inferredOpen = false;
 
 let P: Payload | null = null;
 let tf = { s: 1, x: 0, y: 0 };
@@ -47,8 +49,59 @@ function render(p: Payload): void {
   if (newFile) fit();
   else applyTf();
   updatePanel();
+  renderInferred();
   void api.invoke('rendered');
 }
+
+// ---------- 推断项清单：每条可以留或删；悬停在图上高亮对应的东西，点一下滚过去 ----------
+function highlight(ids: string[]): void {
+  const set = new Set(ids);
+  for (const [id, g] of nodeEl) g.classList.toggle('hl', set.has(id));
+}
+
+function centerOn(ids: string[]): void {
+  const ns = ids.map((id) => nodeById.get(id)).filter((n): n is NodeMeta => !!n);
+  if (!ns.length) return;
+  const cx = ns.reduce((a, n) => a + n.x, 0) / ns.length;
+  const cy = ns.reduce((a, n) => a + n.y, 0) / ns.length;
+  const r = canvas.getBoundingClientRect();
+  tf = { ...tf, x: r.width / 2 - cx * tf.s, y: r.height / 2 - cy * tf.s };
+  applyTf();
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function renderInferred(): void {
+  const items = P?.inferred ?? [];
+  inferredPanel.hidden = !inferredOpen || !items.length;
+  if (inferredPanel.hidden) {
+    highlight([]);
+    return;
+  }
+  inferredPanel.innerHTML = items
+    .map((it, i) => `<div class="row" data-i="${i}"><span class="what">${esc(it.what)}<span class="basis">${esc(it.basis)}</span></span><a class="act keep" data-i="${i}">留</a><a class="act drop" data-i="${i}">删</a></div>`)
+    .join('');
+}
+
+inferredPanel.addEventListener('mouseover', (ev) => {
+  const row = (ev.target as Element).closest<HTMLElement>('.row');
+  highlight(row && P ? P.inferred[Number(row.dataset.i)].ids : []);
+});
+inferredPanel.addEventListener('mouseleave', () => highlight([]));
+inferredPanel.addEventListener('click', (ev) => {
+  const t = ev.target as HTMLElement;
+  if (!P) return;
+  const act = t.closest<HTMLElement>('.act');
+  if (act) {
+    const it = P.inferred[Number(act.dataset.i)];
+    void api.invoke('apply', { ops: act.classList.contains('keep') ? it.keep : it.drop });
+    return;
+  }
+  const row = t.closest<HTMLElement>('.row');
+  if (row) centerOn(P.inferred[Number(row.dataset.i)].ids);
+});
 
 function applyTf(): void {
   vp.setAttribute('transform', `translate(${tf.x} ${tf.y}) scale(${tf.s})`);
@@ -342,11 +395,16 @@ canvas.addEventListener(
 );
 
 window.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape' && !editing) {
-    sel.clear();
-    markSelection();
-    updatePanel();
+  if (ev.key !== 'Escape' || editing) return;
+  if (inferredOpen) {
+    inferredOpen = false;
+    renderInferred();
+    void api.invoke('inferredClosed');
+    return;
   }
+  sel.clear();
+  markSelection();
+  updatePanel();
 });
 window.addEventListener('resize', () => applyTf());
 
@@ -366,6 +424,10 @@ function command(c: { name: string; id?: string; factor?: number }): void {
     updatePanel();
   } else if (c.name === 'rename' && c.id) rename(c.id);
   else if (c.name === 'editCard' && c.id) editCard(c.id);
+  else if (c.name === 'inferred') {
+    inferredOpen = !!(c as { open?: boolean }).open;
+    renderInferred();
+  }
 }
 
 api.on('state', (p) => render(p as Payload));

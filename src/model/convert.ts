@@ -402,7 +402,7 @@ export function convert(facts: FactSet, d: Decisions): ConvertResult {
           attributes: [],
           identifying: f.identifying ?? identifying,
           dashed: f.dashed ?? false,
-          origin: g.origin === 'fk' ? 'fk' : 'fk-inferred',
+          origin: g.origin === 'fk-inferred' ? 'fk-inferred' : 'fk', // 用户确认过（decision）的和源码声明的一样算外键
           ref: g.fk?.ref ?? t.columns.find((c) => lower(c.name) === lower(g.cols[0]))?.ref,
         };
         relationships.push(rel);

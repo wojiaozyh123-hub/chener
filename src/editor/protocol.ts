@@ -1,6 +1,7 @@
 // 编辑器主进程、后台线程、页面之间传的数据。
 
 import type { ShapeKind, NodeKind } from '../layout/shapes.js';
+import type { InferredItem } from '../model/inferred.js';
 import type { Style } from '../model/view.js';
 
 export interface NodeMeta {
@@ -38,4 +39,5 @@ export interface Payload {
   edges: EdgeMeta[];
   errors: number;
   style: Style;
+  inferred: InferredItem[];
 }

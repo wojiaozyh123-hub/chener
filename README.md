@@ -23,7 +23,7 @@
 **命令行 + MCP**：需要 Node.js 20 或更新版本（<https://nodejs.org> 下载 LTS 安装包）。在 PowerShell 里：
 
 ```powershell
-npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.2.0/chener-0.2.0.tgz
+npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.3.0/chener-0.3.0.tgz
 chener --version
 ```
 
@@ -40,11 +40,14 @@ chener --version
 | 换形状 | 右键节点；或选中后在右侧改 |
 | 字体、字号、加粗 | 选中后在右侧改（全选时连基数标签一起改） |
 | 实线 / 虚线（逻辑关联） | 右键关系线 |
+| 看程序和 agent 推断的东西，逐条留或删 | “编辑 → 推断项清单”（Ctrl+I）；鼠标停在一条上，图上对应的东西会亮起来，点一下滚过去 |
 | 撤销 / 重做 | Ctrl+Z / Ctrl+Y |
 | 整理（拖过的不动，其余理顺） | Ctrl+L |
 | 全部重排 | Ctrl+Shift+L |
 | 平移 / 缩放 | 拖空白处或滚轮平移；Ctrl + 滚轮缩放；Ctrl+0 适应窗口 |
 | 导出 PNG / SVG / draw.io，读回 draw.io 的修改 | “文件”菜单 |
+
+推断项清单里有：按列名推断的外键、按规则画成 M:N 关系的表、agent 加的关系（附依据）、agent 起的名字、从注释推出来的名字。“留”就记成你的决定，“删”就撤掉这条推断（外键变回普通列、关系表变回实体、加的关系去掉、名字恢复）。你自己改的名不算推断；agent 不能替你确认。
 
 每次修改都自动保存到项目文件。核对出的问题（交叉、压盖、标签压线）直接在图上标红，鼠标停上去能看到原因。改名、改字体之后东西不会自己挪动；有压到的就标红，按 Ctrl+L 整理。
 

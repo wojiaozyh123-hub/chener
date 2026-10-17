@@ -75,6 +75,7 @@ const opSchema = z.discriminatedUnion('op', [
   }),
   z.object({ op: z.literal('move'), id: z.string(), x: z.number(), y: z.number() }).describe('移动（实体的属性跟着走），记为用户摆过'),
   z.object({ op: z.literal('place'), id: z.string(), x: z.number(), y: z.number() }).describe('放到绝对位置（不带动属性），记为用户摆过'),
+  z.object({ op: z.literal('reset_label'), id: z.string() }).describe('去掉改过的名字，恢复按源码推出的名字'),
   z.object({ op: z.literal('reset_style'), id: z.string().optional(), props: z.array(z.enum(['fontFamily', 'fontSize', 'bold', 'shape'])).optional() }).describe('去掉单个节点（或全部节点）的字体/形状单独设置'),
 ]);
 

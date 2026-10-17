@@ -120,8 +120,72 @@ body.busy * {
   background: #ffffff;
 }
 
+#inferred {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  width: 470px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  font-size: 14px;
+}
+
+#inferred .row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 9px 14px;
+  border-bottom: 1px solid #eeeeee;
+  cursor: pointer;
+}
+
+#inferred .row:last-child {
+  border-bottom: none;
+}
+
+#inferred .row:hover {
+  background: #fafafa;
+}
+
+#inferred .what {
+  flex: 1;
+  line-height: 1.5;
+}
+
+#inferred .basis {
+  color: #777777;
+  margin-left: 8px;
+}
+
+#inferred .act {
+  cursor: pointer;
+  user-select: none;
+}
+
+#inferred .act:hover {
+  text-decoration: underline;
+}
+
+#inferred .keep {
+  color: #1d4ed8;
+}
+
+#inferred .drop {
+  color: #b42318;
+}
+
+.node.hl > :is(rect, polygon, ellipse) {
+  stroke: #f59e0b;
+  stroke-width: 3;
+}
+
 #editor[hidden],
 #panel[hidden],
+#inferred[hidden],
 #start[hidden] {
   display: none;
 }

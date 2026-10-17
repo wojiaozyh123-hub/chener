@@ -6,6 +6,7 @@ import path from 'node:path';
 import { parentPort } from 'node:worker_threads';
 import type { Op } from '../model/ops.js';
 import { applyOpsInMemory, evaluate, exportAll, generate, importDrawio, loadProject, relayout, saveProject, type LayoutMode, type ProjectFile, type State } from '../project.js';
+import { inferredItems } from '../model/inferred.js';
 import { renderInteractive } from '../render/svg.js';
 import { availableFamilies } from '../text/fonts.js';
 import type { Payload } from './protocol.js';
@@ -40,6 +41,7 @@ function payload(st: State): Payload {
     })),
     errors: st.report.errors,
     style: st.project.view.style,
+    inferred: inferredItems(st.project.facts, st.project.decisions, st.model, st.pending),
   };
 }
 

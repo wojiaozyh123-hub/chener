@@ -1,6 +1,6 @@
 {
   "name": "chener",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "从 SQL 建表语句 / SQLAlchemy 源码生成 Chen 记法 ER 图：线不交叉、字段不遗漏，带命令行和 MCP 服务",
   "license": "MIT",
   "type": "module",

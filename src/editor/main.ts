@@ -59,6 +59,7 @@ interface Reply {
   errors?: string[];
 }
 let doc: Doc | null = null;
+let inferredOpen = false;
 let undoStack: ProjectFile[] = [];
 let redoStack: ProjectFile[] = [];
 let busy = 0;
@@ -81,7 +82,9 @@ function setDoc(r: Reply, history: 'push' | 'keep' | 'reset'): void {
   doc = { file: r.payload.file, project: r.project, hash: r.hash, payload: r.payload };
   if (fileChanged) watch(doc.file);
   win?.setTitle(`${r.payload.title} — chener`);
+  if (!r.payload.inferred.length) inferredOpen = false;
   send('state', r.payload);
+  send('command', { name: 'inferred', open: inferredOpen });
   buildMenu();
 }
 
@@ -265,6 +268,15 @@ function buildMenu(): void {
         { type: 'separator' },
         { label: '全选', accelerator: 'CmdOrCtrl+A', enabled: has, click: () => send('command', { name: 'selectAll' }) },
         { type: 'separator' },
+        {
+          label: '推断项清单',
+          type: 'checkbox',
+          checked: inferredOpen,
+          accelerator: 'CmdOrCtrl+I',
+          enabled: has && (inferredOpen || !!doc?.payload.inferred.length),
+          click: () => toggleInferred(!inferredOpen),
+        },
+        { type: 'separator' },
         { label: '整理（保留拖过的位置）', accelerator: 'CmdOrCtrl+L', enabled: has, click: () => void layout(true) },
         { label: '全部重排', accelerator: 'CmdOrCtrl+Shift+L', enabled: has, click: () => void layout(false) },
       ],
@@ -281,6 +293,12 @@ function buildMenu(): void {
     },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(tpl));
+}
+
+function toggleInferred(open: boolean): void {
+  inferredOpen = open && !!doc?.payload.inferred.length;
+  send('command', { name: 'inferred', open: inferredOpen });
+  buildMenu();
 }
 
 function contextMenu(kind: string, id: string): void {
@@ -321,6 +339,8 @@ ipcMain.handle('chener', async (_e, cmd: string, args: Record<string, unknown> =
       return call<string[]>('fonts');
     case 'rendered':
       return onRendered();
+    case 'inferredClosed':
+      return toggleInferred(false);
     default:
       throw new Error(`不认识的命令 ${cmd}`);
   }
@@ -351,6 +371,7 @@ app.whenReady().then(async () => {
   const arg = process.argv.slice(1).find((x) => /\.json$/i.test(x) && fs.existsSync(x));
   const fileArg = process.env.CHENER_OPEN ?? arg;
   if (fileArg) await openProject(path.resolve(fileArg));
+  if (process.env.CHENER_SNAPSHOT_INFERRED) toggleInferred(true);
 });
 
 app.on('window-all-closed', () => {
