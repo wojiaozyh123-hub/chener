@@ -241,52 +241,9 @@ function tidyComponent(edges: CompEdge[], centers: FanItem[], leaves: FanItem[][
   let fans = packAll(pos);
   let R = fans.map((f) => f.radius + 2);
   const mk = (R: number[], free: Set<string>): SkEdge[] => edges.map((e) => ({ a: e.a, b: e.b, len: R[e.a] + R[e.b] + L0, free: free.has(kOf(e.a, e.b)) }));
-  // 拖走一个实体后，它的关系菱形还留在原地，线就交叉了。连续移动不会改变点在线的哪一侧，解不开这种交叉；
-  // 所以先让卷进交叉、没被拖过的节点“跳”到邻居中间附近：交叉变少、又不压到别的圆盘和线才接受。
-  const all = mk(R, new Set());
-  const crossCount = (P: Vec[]) => crossingPairs(P, all).length;
-  const fits = (P: Vec[], v: number) => {
-    for (let u = 0; u < n; u++) if (u !== v && Math.hypot(P[u].x - P[v].x, P[u].y - P[v].y) < R[u] + R[v] + OPTS.margin) return false;
-    for (const e of all) {
-      if (e.a === v || e.b === v) continue;
-      const ax = P[e.a].x, ay = P[e.a].y, bx = P[e.b].x, by = P[e.b].y;
-      const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1e-9;
-      const t = Math.max(0, Math.min(1, ((P[v].x - ax) * (bx - ax) + (P[v].y - ay) * (by - ay)) / l2));
-      if (Math.hypot(P[v].x - ax - (bx - ax) * t, P[v].y - ay - (by - ay) * t) < R[v] + OPTS.edgeMargin) return false;
-    }
-    return true;
-  };
-  for (let pass = 0; pass < 4; pass++) {
-    const before = crossCount(pos);
-    if (!before) break;
-    const involved = new Set<number>();
-    for (const [i, j] of crossingPairs(pos, all)) for (const e of [all[i], all[j]]) for (const v of [e.a, e.b]) if (!pinned[v]) involved.add(v);
-    let improved = false;
-    // 关系菱形优先：它们通常是被留在原地的那个
-    for (const v of [...involved].sort((a, b) => Number(relIds.has(ids[b])) - Number(relIds.has(ids[a])))) {
-      const nb = nbrs[v];
-      if (!nb.length) continue;
-      const bx = nb.reduce((a, j) => a + pos[j].x, 0) / nb.length;
-      const by = nb.reduce((a, j) => a + pos[j].y, 0) / nb.length;
-      const cur = crossCount(pos);
-      let done = false;
-      for (const r of [0, 60, 120, 200, 320]) {
-        for (let k = 0; k < (r ? 8 : 1) && !done; k++) {
-          const t = (k / 8) * Math.PI * 2;
-          const trial = pos.slice();
-          trial[v] = { x: bx + Math.cos(t) * r, y: by + Math.sin(t) * r };
-          if (crossCount(trial) < cur && fits(trial, v)) {
-            pos[v] = trial[v];
-            done = improved = true;
-          }
-        }
-        if (done) break;
-      }
-    }
-    if (!improved) break;
-    fans = packAll(pos);
-    R = fans.map((f) => f.radius + 2);
-  }
+  untangle(pos, edges, R, pinned, nbrs, (v) => relIds.has(ids[v]));
+  fans = packAll(pos);
+  R = fans.map((f) => f.radius + 2);
   // 还剩下的交叉：这些边允许交叉（守不住），其余照常不产生新交叉
   const free = new Set<string>();
   for (const [i, j] of crossingPairs(pos, mk(R, free))) {
@@ -301,6 +258,59 @@ function tidyComponent(edges: CompEdge[], centers: FanItem[], leaves: FanItem[][
     fans = packAll(p);
   }
   return { pos: p, fans, score: 0, forced: [] };
+}
+
+/**
+ * 解交叉：连续移动不会改变点在线的哪一侧，解不开已有的交叉（拖走实体后留在原地的菱形、应力画法里的交叉）。
+ * 让卷进交叉、没被固定的节点“跳”到邻居中间附近：交叉变少、又不压到别的圆盘和线才接受。关系菱形优先跳。
+ */
+function untangle(pos: Vec[], edges: CompEdge[], R: number[], pinned: boolean[], nbrs: number[][], isRel: (v: number) => boolean, checkFit = true): void {
+  const n = pos.length;
+  const all: SkEdge[] = edges.map((e) => ({ a: e.a, b: e.b, len: 0, free: false }));
+  const crossCount = (P: Vec[]) => crossingPairs(P, all).length;
+  // checkFit=false：应力画法本来就不管簇大小、簇之间早已叠着，这一步只解交叉；间距由后面的“摊匀 → 放大”负责
+  const fits = (P: Vec[], v: number) => {
+    if (!checkFit) {
+      for (let u = 0; u < n; u++) if (u !== v && Math.hypot(P[u].x - P[v].x, P[u].y - P[v].y) < 1) return false;
+      return true;
+    }
+    for (let u = 0; u < n; u++) if (u !== v && Math.hypot(P[u].x - P[v].x, P[u].y - P[v].y) < R[u] + R[v] + OPTS.margin) return false;
+    for (const e of all) {
+      if (e.a === v || e.b === v) continue;
+      const ax = P[e.a].x, ay = P[e.a].y, bx = P[e.b].x, by = P[e.b].y;
+      const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1e-9;
+      const t = Math.max(0, Math.min(1, ((P[v].x - ax) * (bx - ax) + (P[v].y - ay) * (by - ay)) / l2));
+      if (Math.hypot(P[v].x - ax - (bx - ax) * t, P[v].y - ay - (by - ay) * t) < R[v] + OPTS.edgeMargin) return false;
+    }
+    return true;
+  };
+  for (let pass = 0; pass < 6; pass++) {
+    if (!crossCount(pos)) return;
+    const involved = new Set<number>();
+    for (const [i, j] of crossingPairs(pos, all)) for (const e of [all[i], all[j]]) for (const v of [e.a, e.b]) if (!pinned[v]) involved.add(v);
+    let improved = false;
+    for (const v of [...involved].sort((a, b) => Number(isRel(b)) - Number(isRel(a)))) {
+      const nb = nbrs[v];
+      if (!nb.length) continue;
+      const bx = nb.reduce((a, j) => a + pos[j].x, 0) / nb.length;
+      const by = nb.reduce((a, j) => a + pos[j].y, 0) / nb.length;
+      const cur = crossCount(pos);
+      let done = false;
+      for (const r of [0, 60, 120, 200, 320, 480]) {
+        for (let k = 0; k < (r ? 12 : 1) && !done; k++) {
+          const t = (k / 12) * Math.PI * 2;
+          const trial = pos.slice();
+          trial[v] = { x: bx + Math.cos(t) * r, y: by + Math.sin(t) * r };
+          if (crossCount(trial) < cur && fits(trial, v)) {
+            pos[v] = trial[v];
+            done = improved = true;
+          }
+        }
+        if (done) break;
+      }
+    }
+    if (!improved) return;
+  }
 }
 
 function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leaves: FanItem[][], fp: typeof FAN, ids: string[], model: Model): CompResult {
@@ -329,7 +339,7 @@ function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leave
   const pd0 = planarDrawing(n, pairs, 0);
   if (pd0.planar) {
     starts.push({ pos: pd0.pos, free: new Set() });
-    if (n >= 4) starts.push({ pos: planarDrawing(n, pairs, 1).pos, free: new Set() });
+    for (let f = 1; f < (n >= 4 ? 4 : 1); f++) starts.push({ pos: planarDrawing(n, pairs, f).pos, free: new Set() });
   } else {
     // 不是平面图：换几种顺序取极大平面子图，留下的边不同，最后挑交叉最少的
     for (const seed of [0, 1, 2, 3]) {
@@ -340,7 +350,8 @@ function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leave
   const sk0 = mkEdges(R0, new Set());
   for (const seed of [7, 19]) {
     const s = stressLayout(n, sk0, seed);
-    // 应力画法有交叉时，贪心去掉交叉最多的边，剩下的必须不交叉
+    // 应力画法通常最紧凑，但常带几处交叉：先跳点解开；还剩的，贪心去掉交叉最多的边，剩下的必须不交叉
+    untangle(s, edges, R0, new Array(n).fill(false), nbrs, (v) => relIds.has(ids[v]), false);
     const free = new Set<string>();
     for (;;) {
       const sk = mkEdges(R0, free).filter((e) => !e.free);
@@ -378,7 +389,8 @@ function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leave
     pos = scaleToClear(pos, mkNodes(R), sk, OPTS);
     let fans: FanResult[] = [];
     for (let round = 0; round < 4; round++) {
-      pos = refine(pos, mkNodes(R), sk, OPTS, round === 0 ? 1000 : 400);
+      // 迭代数：照护样本上 1 倍时收紧没收敛（得分 7.6M），3 倍到 4.5M；再多收益不再单调增加
+      pos = refine(pos, mkNodes(R), sk, OPTS, round === 0 ? 3000 : 1200, 0, false, round >= 2 ? 0.02 : 0.003);
       if (round === 0) pos = rotate(pos, landscapeRotation(pos, R));
       fans = packAll(pos);
       R = fans.map((f) => f.radius + 2);

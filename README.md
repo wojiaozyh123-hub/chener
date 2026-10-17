@@ -23,7 +23,7 @@
 **命令行 + MCP**：需要 Node.js 20 或更新版本（<https://nodejs.org> 下载 LTS 安装包）。在 PowerShell 里：
 
 ```powershell
-npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.3.0/chener-0.3.0.tgz
+npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.3.1/chener-0.3.1.tgz
 chener --version
 ```
 

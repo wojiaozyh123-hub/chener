@@ -145,7 +145,7 @@ export function scaleToClear(pos: Vec[], nodes: SkNode[], edges: SkEdge[], o: Sk
  * soft：从用户摆的位置出发时，开局就已经违反的约束（用户把两个东西拖到了一起）无法守住，
  * 这些约束只留推开力、不再限速；其余约束照常保证不产生新的交叉和压盖。
  */
-export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts, iters: number, repel = 0, soft = false): Vec[] {
+export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts, iters: number, repel = 0, soft = false, gravity = 0.003): Vec[] {
   const n = pos0.length;
   const p = pos0.map((q) => ({ ...q }));
   if (n <= 1) return p;
@@ -164,7 +164,7 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
   const ks = 0.08;
   const kr = 3;
   const ke = 2;
-  const kg = 0.003;
+  const kg = gravity; // 收尾时调大：外围的簇往中间靠，空白收掉（约束保证不会因此交叉或压盖）
   const kd = 0.06;
   const kee = 2;
   // 三类约束各有对应的推开力：圆盘—圆盘、圆盘—边、边—边。少了哪一类，贴得太近的那一对就永远分不开，整张图会被它卡住。

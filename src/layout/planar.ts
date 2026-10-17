@@ -443,9 +443,9 @@ export function planarDrawing(n: number, edges: Edge[], faceChoice = 0, orderSee
     emb = embed(n, use)!;
   }
   makeBiconnected(n, emb);
-  // 外圈选最大的面（换起点时轮换前几大的面）
+  // 外圈选大的面（换起点时轮换前几大的面）。试过“外圈避开度数高的点”，在照护样本上反而松了 1.4~9 倍，没采用
   const faces = emb.faces().sort((a, b) => b.length - a.length);
-  const outer = faces[faceChoice % Math.min(3, faces.length)];
+  const outer = faces[faceChoice % Math.min(4, faces.length)];
   triangulateInner(n, emb, outer[0], outer[1]);
   return { pos: tutte(n, emb, outer), planar: leftover.length === 0, leftover };
 }
