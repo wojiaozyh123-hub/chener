@@ -10,18 +10,52 @@
 - **不遗漏**：每一列都要落到且只落到一处：画成属性、变成关系，或者写明原因排除。漏一列就报错。
 - **不弄错**：建表语句用两个独立的解析器各读一遍、逐表对比；没声明外键时按列名推断，推断的关系单独列出来等确认；agent 补的关系必须附源码证据，程序会去文件里核对。
 
-可以单独当命令行用，也可以作为 MCP 服务给 Claude Code 等 agent 调用。
+三种用法，改的是同一个项目文件（`.er.json`）：
 
-> 当前是第一步（M1）：核心库 + 命令行 + MCP。图形编辑器（拖动、换形状、点线改基数）在下一步。在那之前可以导出 `.drawio` 文件，用 draw.io 桌面版打开继续拖。
+- **图形编辑器**（Windows 安装包）：拖动、换形状、改字体、点线改基数、撤销、整理。
+- **命令行 / MCP 服务**：给 Claude Code 等 agent 调用；agent 改了项目，开着的编辑器会跟着刷新。
+- **draw.io**：导出 `.drawio` 在 draw.io 里改，改完读回项目。
 
 ## 安装（Windows）
 
-需要 Node.js 20 或更新版本（<https://nodejs.org> 下载 LTS 安装包）。在 PowerShell 里：
+**编辑器**：到 [Releases](https://github.com/wojiaozyh123-hub/chener/releases/latest) 下载 `chener-editor-…-setup.exe` 安装。安装包没有签名，第一次运行 Windows 会提示“未知发布者”，点“更多信息 → 仍要运行”。
+
+**命令行 + MCP**：需要 Node.js 20 或更新版本（<https://nodejs.org> 下载 LTS 安装包）。在 PowerShell 里：
 
 ```powershell
-npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.1.0/chener-0.1.0.tgz
+npm install -g https://github.com/wojiaozyh123-hub/chener/releases/download/v0.2.0/chener-0.2.0.tgz
 chener --version
 ```
+
+## 编辑器
+
+打开后选“打开项目”或“从源码生成”（选 `.sql` / `.py` 文件；整个项目文件夹在“文件”菜单里）。
+
+| 想做什么 | 怎么做 |
+|---|---|
+| 挪位置 | 拖。拖实体或关系时它的属性跟着走；拖属性只动它自己 |
+| 多选 | Shift 或 Ctrl + 点击；Ctrl+A 全选 |
+| 改名 | 双击 |
+| 改基数（1 / N / M / 0..1 …） | 点线上的基数，或点关系线 |
+| 换形状 | 右键节点；或选中后在右侧改 |
+| 字体、字号、加粗 | 选中后在右侧改（全选时连基数标签一起改） |
+| 实线 / 虚线（逻辑关联） | 右键关系线 |
+| 撤销 / 重做 | Ctrl+Z / Ctrl+Y |
+| 整理（拖过的不动，其余理顺） | Ctrl+L |
+| 全部重排 | Ctrl+Shift+L |
+| 平移 / 缩放 | 拖空白处或滚轮平移；Ctrl + 滚轮缩放；Ctrl+0 适应窗口 |
+| 导出 PNG / SVG / draw.io，读回 draw.io 的修改 | “文件”菜单 |
+
+每次修改都自动保存到项目文件。核对出的问题（交叉、压盖、标签压线）直接在图上标红，鼠标停上去能看到原因。改名、改字体之后东西不会自己挪动；有压到的就标红，按 Ctrl+L 整理。
+
+## draw.io 往返
+
+```powershell
+chener render 项目.er.json --drawio          # 导出 项目.drawio
+chener import-drawio 项目.er.json 项目.drawio  # 在 draw.io 里改完后读回
+```
+
+读回的内容：位置、名字、形状、字体字号加粗、线上的基数、虚线。ER 的结构以源码为准：在 draw.io 里新画的图形、删掉的图形、改了端点的线不会改结构，读回时会一一列出来。压缩和不压缩的 draw.io 文件都能读。
 
 ## 快速开始
 
@@ -73,7 +107,8 @@ claude mcp add chener -- cmd /c chener mcp
 | `generate_er` | 读 `.sql` / `.py` 文件或文件夹，生成或更新项目，返回摘要和图片 |
 | `get_er` | 读模型（各对象的 id）、列清单、待确认项、核对报告 |
 | `apply_er_ops` | 提交一组修改操作，全部合法才写入 |
-| `layout_er` | 重新排布 |
+| `layout_er` | 重新排布；`keep=true` 是整理（保留用户拖过的位置） |
+| `import_drawio` | 读回用户在 draw.io 里改过的文件 |
 | `check_er` | 逐条列出核对问题 |
 | `render_er` | 导出 PNG / SVG / draw.io |
 
@@ -85,7 +120,8 @@ claude mcp add chener -- cmd /c chener mcp
 | `chener gen -o 项目.er.json --png` | 不写输入：按项目里记的输入重新读源码（源码改了之后用） |
 | `chener apply <项目> <操作.json> [--png]` | 应用修改操作 |
 | `chener check <项目>` | 核对 |
-| `chener layout <项目> [--png]` | 重新排布 |
+| `chener layout <项目> [--keep] [--png]` | 全部重排；`--keep` 是整理，拖过的位置不动 |
+| `chener import-drawio <项目> <文件.drawio>` | 读回 draw.io 里的修改 |
 | `chener render <项目> [--png] [--svg] [--drawio] [--scale 3]` | 按当前位置导出 |
 | `chener ledger <项目>` | 每张表、每一列落到了哪里 |
 | `chener fonts` | 本机能用的字体 |
@@ -109,6 +145,8 @@ PNG 默认放大 2 倍，插 Word 够清楚；要更清楚用 `--scale 3`。
 | 字体 / 字号 / 加粗 | `{"op":"set_style","kind":"attribute","fontFamily":"SimHei","fontSize":14,"bold":true}` |
 | 标记 | `{"op":"set_flags","id":"user.age","derived":true}` |
 | 移动 | `{"op":"move","id":"user","x":400,"y":300}`（实体的属性跟着走） |
+| 放到绝对位置 | `{"op":"place","id":"user.avatar","x":420,"y":180}`（不带动别的） |
+| 去掉单独设置 | `{"op":"reset_style","id":"user","props":["fontSize","shape"]}` |
 
 id 的写法：实体 = 表名；属性 = `表名.列名`；外键关系 = `fk:表名.列名`；关联表关系 = `rel:表名`；后加的关系 = `add:…`。不确定就 `chener ledger` 或 MCP 的 `get_er` 查。
 
@@ -133,10 +171,17 @@ id 的写法：实体 = 表名；属性 = `表名.列名`；外键关系 = `fk:�
 
 骨架本身不是平面图（数学上必然有交叉）时，会说明是哪几条线，并尽量让交叉少。
 
+## 改完之后怎么排
+
+- 有人手摆过位置（编辑器里拖过、`move`/`place`、从 draw.io 读回）：结构性修改和重新读源码之后只做“整理”，拖过的不动。
+- 没人动过：结构性修改后全部重排，排得最紧凑。
+- 编辑器里改名、改字体、改基数：不挪任何东西，只核对。
+
 ## 已知限制
 
-- 还没有图形编辑器（下一步做）；`move` 移过的位置，在重新排布（`layout`、结构性修改）后会被覆盖。
+- 整理是在你摆的位置上理顺：你把两个东西拖到了一起，它会尽量推开，推不开的会标红；需要彻底重来时用“全部重排”。
 - 表很多（50 张以上）时一张图会很大，按模块分页还没做。
+- 编辑器里还没有内置大模型对话；现在由 Claude Code 等 agent 通过 MCP 来改，编辑器会实时刷新。
 - 布局用的是本机字体量出来的文字宽度；项目文件拿到没有这个字体的电脑上，会提示宽度是估算的。
 
 ## 开发
@@ -145,6 +190,9 @@ id 的写法：实体 = 表名；属性 = `表名.列名`；外键关系 = `fk:�
 npm install
 npm run build
 node dist/cli.js gen examples/music/music.sql -o out/music.er.json --png
+npm run editor        # 本机运行编辑器
 ```
+
+Windows 安装包由 GitHub Actions（`.github/workflows/editor-windows.yml`）在 Windows 机器上打包，推送 `v*` 标签时自动上传到 Release。
 
 Python 语法解析用了 [tree-sitter-python](https://github.com/tree-sitter/tree-sitter-python) 的 wasm（MIT，见 `grammars/`）。

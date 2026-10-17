@@ -222,3 +222,8 @@ export function fontFilesFor(families: string[]): string[] {
   }
   return [...out];
 }
+
+/** 本机装了的常见字体（编辑器的字体下拉用）。 */
+export function availableFamilies(): string[] {
+  return KNOWN.filter((k) => resolveFont(k.family).found).map((k) => k.family);
+}

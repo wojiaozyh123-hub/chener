@@ -28,7 +28,9 @@ export type Op =
   | { op: 'set_flags'; id: string; key?: boolean; partialKey?: boolean; multivalued?: boolean; derived?: boolean; weak?: boolean; identifying?: boolean; dashed?: boolean }
   | { op: 'set_shape'; id: string; shape: ShapeKind | null }
   | { op: 'set_style'; id?: string; kind?: 'entity' | 'relationship' | 'attribute' | 'card'; fontFamily?: string; fontSize?: number; bold?: boolean; cardCase?: 'upper' | 'lower' }
-  | { op: 'move'; id: string; x: number; y: number };
+  | { op: 'move'; id: string; x: number; y: number }
+  | { op: 'place'; id: string; x: number; y: number }
+  | { op: 'reset_style'; id?: string; props?: ('fontFamily' | 'fontSize' | 'bold' | 'shape')[] };
 
 export interface OpsResult {
   errors: string[];
@@ -171,6 +173,24 @@ export function applyOps(d: Decisions, view: View, model: Model, ops: Op[]): Ops
           const av = view.nodes[a.id];
           if (av?.x !== undefined && av.y !== undefined && !av.pinned) view.nodes[a.id] = { ...av, x: av.x + dx, y: av.y + dy };
         }
+        break;
+      }
+      case 'place': {
+        // 绝对位置（draw.io 读回、编辑器里逐个摆放）：不带动属性
+        if (!nodeIds.has(op.id)) return fail(`找不到 ${op.id}`);
+        view.nodes[op.id] = { ...view.nodes[op.id], x: op.x, y: op.y, pinned: true };
+        break;
+      }
+      case 'reset_style': {
+        const props = op.props ?? ['fontFamily', 'fontSize', 'bold', 'shape'];
+        const targets = op.id ? [op.id] : Object.keys(view.nodes);
+        if (op.id && !nodeIds.has(op.id)) return fail(`找不到 ${op.id}`);
+        for (const id of targets) {
+          const nv = { ...view.nodes[id] };
+          for (const k of props) delete nv[k];
+          view.nodes[id] = nv;
+        }
+        structural = true;
         break;
       }
       default:

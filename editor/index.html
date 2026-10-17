@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; img-src 'self' data:" />
+    <title>chener</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="start">
+      <button id="btnOpen">打开项目</button>
+      <button id="btnGen">从源码生成</button>
+    </div>
+    <svg id="canvas" xmlns="http://www.w3.org/2000/svg"><g id="vp"></g></svg>
+    <div id="panel" hidden>
+      <label>字体<input id="pFamily" list="fontList" spellcheck="false" /></label>
+      <label>字号<input id="pSize" type="number" min="6" max="96" step="1" /></label>
+      <label class="check"><input id="pBold" type="checkbox" />加粗</label>
+      <label
+        >形状<select id="pShape">
+          <option value="rect">矩形</option>
+          <option value="double-rect">双矩形（弱实体）</option>
+          <option value="rounded-rect">圆角矩形</option>
+          <option value="diamond">菱形</option>
+          <option value="double-diamond">双菱形（标识关系）</option>
+          <option value="ellipse">椭圆</option>
+          <option value="double-ellipse">双椭圆（多值属性）</option>
+          <option value="dashed-ellipse">虚线椭圆（派生属性）</option>
+        </select></label
+      >
+    </div>
+    <datalist id="fontList"></datalist>
+    <input id="editor" hidden spellcheck="false" />
+    <script type="module" src="../dist/editor/renderer.js"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 {
   "name": "chener",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "从 SQL 建表语句 / SQLAlchemy 源码生成 Chen 记法 ER 图：线不交叉、字段不遗漏，带命令行和 MCP 服务",
   "license": "MIT",
   "type": "module",
@@ -19,7 +19,9 @@
   },
   "scripts": {
     "build": "tsc -p .",
-    "prepare": "tsc -p ."
+    "prepare": "tsc -p .",
+    "editor": "tsc -p . && electron .",
+    "dist:win": "tsc -p . && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",
@@ -32,6 +34,8 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
     "typescript": "5.9.3"
   },
   "repository": {
@@ -45,5 +49,37 @@
     "sqlalchemy",
     "mcp",
     "ER图"
-  ]
+  ],
+  "main": "dist/editor/main.js",
+  "build": {
+    "appId": "io.github.wojiaozyh123.chener",
+    "productName": "chener",
+    "asar": false,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "editor/**/*",
+      "grammars/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "chener-editor-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "shortcutName": "chener ER 图"
+    }
+  }
 }

@@ -7,7 +7,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import type { Op } from './model/ops.js';
 import { SHAPES } from './layout/shapes.js';
-import { applyOpsToProject, defaultExportPath, evaluate, exportAll, generate, loadProject, relayout, saveProject, type State } from './project.js';
+import { applyOpsToProject, defaultExportPath, evaluate, exportAll, generate, importDrawio, loadProject, relayout, saveProject, type State } from './project.js';
 import { renderPng } from './render/png.js';
 import { renderSvg } from './render/svg.js';
 import { summaryText } from './summary.js';
@@ -26,6 +26,7 @@ const INSTRUCTIONS = `chener 从 SQL 建表语句（MySQL / PostgreSQL / SQLite 
    - 库里没有列、但代码里确实存在的业务关系（例如管理员管理歌曲），用 add_relationship，并且必须附 evidence：file（相对项目文件所在目录或绝对路径）、line（行号）、text（该行里的一段原文）。程序会去文件里核对，对不上就报错。
    - 只有用户亲口说过的关系才写 assertedBy:"user"。不要编造关系或字段。
 4. render_er 导出 PNG（会把图片一并返回给你看）、SVG 或 draw.io 文件。
+5. 用户在编辑器或 draw.io 里摆过位置后：重新排布用 layout_er 的 keep=true（整理），不要全部重排；用户在 draw.io 里改过的文件用 import_drawio 读回。
 check_er 没通过时，把问题原样告诉用户，不要说成已经完成。`;
 
 const cardSchema = z.string().describe('基数文本：1、N、M，或自定义如 0..1');
@@ -72,7 +73,9 @@ const opSchema = z.discriminatedUnion('op', [
     bold: z.boolean().optional(),
     cardCase: z.enum(['upper', 'lower']).optional(),
   }),
-  z.object({ op: z.literal('move'), id: z.string(), x: z.number(), y: z.number() }),
+  z.object({ op: z.literal('move'), id: z.string(), x: z.number(), y: z.number() }).describe('移动（实体的属性跟着走），记为用户摆过'),
+  z.object({ op: z.literal('place'), id: z.string(), x: z.number(), y: z.number() }).describe('放到绝对位置（不带动属性），记为用户摆过'),
+  z.object({ op: z.literal('reset_style'), id: z.string().optional(), props: z.array(z.enum(['fontFamily', 'fontSize', 'bold', 'shape'])).optional() }).describe('去掉单个节点（或全部节点）的字体/形状单独设置'),
 ]);
 
 function textResult(text: string, extra: { type: 'image'; data: string; mimeType: string }[] = []) {
@@ -174,13 +177,34 @@ export async function runMcp(version: string): Promise<void> {
 
   server.registerTool(
     'layout_er',
-    { title: '重新排布', description: '重新排布全部节点（会覆盖手工 move 的位置）。', inputSchema: { project: z.string() } },
+    {
+      title: '重新排布',
+      description: '默认全部重排（会覆盖用户拖过的位置）；keep=true 是整理：用户拖过的位置不动，其余理顺。用户在编辑器里摆过图时用 keep。',
+      inputSchema: { project: z.string(), keep: z.boolean().optional() },
+    },
     (a) =>
       guard(() => {
         const abs = path.resolve(a.project);
-        const st = relayout(abs, loadProject(abs));
+        const st = relayout(abs, loadProject(abs), !!a.keep);
         saveProject(st);
         return textResult(summaryText(st, { written: [st.file], limit: 30 }), [preview(st)]);
+      }),
+  );
+
+  server.registerTool(
+    'import_drawio',
+    {
+      title: '读回 draw.io 修改',
+      description: '读回用户在 draw.io 里改过的 .drawio 文件（必须是 chener 导出的那份）：位置、名字、形状、字体、基数、虚线。不重新排布。',
+      inputSchema: { project: z.string(), drawio: z.string().describe('.drawio 文件路径') },
+    },
+    (a) =>
+      guard(() => {
+        const abs = path.resolve(a.project);
+        const r = importDrawio(abs, loadProject(abs), fs.readFileSync(path.resolve(a.drawio), 'utf8'));
+        if (!r.state) return textResult(`没有写入：\n${r.errors.join('\n')}`);
+        saveProject(r.state);
+        return textResult(`从 draw.io 读回 ${r.applied} 处修改\n${r.notes.map((n) => `- ${n}`).join('\n')}\n\n${summaryText(r.state, { written: [r.state.file], limit: 30 })}`, [preview(r.state)]);
       }),
   );
 

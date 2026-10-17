@@ -141,7 +141,11 @@ export function scaleToClear(pos: Vec[], nodes: SkNode[], edges: SkEdge[], o: Sk
 }
 
 /** 约束力导向。返回新位置；输入必须已经满足所有约束（先 scaleToClear）。 */
-export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts, iters: number, repel = 0): Vec[] {
+/**
+ * soft：从用户摆的位置出发时，开局就已经违反的约束（用户把两个东西拖到了一起）无法守住，
+ * 这些约束只留推开力、不再限速；其余约束照常保证不产生新的交叉和压盖。
+ */
+export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts, iters: number, repel = 0, soft = false): Vec[] {
   const n = pos0.length;
   const p = pos0.map((q) => ({ ...q }));
   if (n <= 1) return p;
@@ -169,6 +173,20 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
   let quiet = 0;
   const F: Vec[] = p.map(() => ({ x: 0, y: 0 }));
   const M = new Array(n).fill(Infinity);
+  const dropNN = new Set<number>();
+  const dropNE = new Set<number>();
+  const dropEE = new Set<number>();
+  if (soft) {
+    nn.forEach(([i, j], k) => {
+      if (dist(p[i], p[j]) - nodes[i].r - nodes[j].r - o.margin <= 0) dropNN.add(k);
+    });
+    ne.forEach(([k, ei], q) => {
+      if (pointSegDist(p[k], p[edges[ei].a], p[edges[ei].b]) - nodes[k].r - o.edgeMargin <= 0) dropNE.add(q);
+    });
+    ee.forEach(([a, b], q) => {
+      if (segSegDist(p[edges[a].a], p[edges[a].b], p[edges[b].a], p[edges[b].b]) - o.edgeGap <= 0) dropEE.add(q);
+    });
+  }
 
   for (let it = 0; it < iters; it++) {
     for (let i = 0; i < n; i++) {
@@ -204,14 +222,17 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
         F[i].y += ((p[d2[0]].y + p[d2[1]].y) / 2 - p[i].y) * kd;
       }
     }
-    for (const [i, j] of nn) {
+    for (let q = 0; q < nn.length; q++) {
+      const [i, j] = nn[q];
       const dx = p[j].x - p[i].x;
       const dy = p[j].y - p[i].y;
       const d = Math.hypot(dx, dy) || 1e-6;
       const need = nodes[i].r + nodes[j].r + o.margin;
       const g = d - need;
-      M[i] = Math.min(M[i], g / 2.2);
-      M[j] = Math.min(M[j], g / 2.2);
+      if (!dropNN.has(q)) {
+        M[i] = Math.min(M[i], g / 2.2);
+        M[j] = Math.min(M[j], g / 2.2);
+      }
       const range = Math.max(need * 0.6, repel);
       if (g < range) {
         // 越近推得越狠，余量趋近 0 时推力趋于无穷：任何一对都不会被弹簧拉到贴住
@@ -222,7 +243,8 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
         F[j].y += (dy / d) * f;
       }
     }
-    for (const [k, ei] of ne) {
+    for (let q = 0; q < ne.length; q++) {
+      const [k, ei] = ne[q];
       const e = edges[ei];
       const a = p[e.a];
       const b = p[e.b];
@@ -235,9 +257,11 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
       const d = Math.hypot(dx, dy) || 1e-6;
       const g = d - nodes[k].r - o.edgeMargin;
       const lim = g / 2.2;
-      if (lim < M[k]) M[k] = lim;
-      if (lim < M[e.a]) M[e.a] = lim;
-      if (lim < M[e.b]) M[e.b] = lim;
+      if (!dropNE.has(q)) {
+        if (lim < M[k]) M[k] = lim;
+        if (lim < M[e.a]) M[e.a] = lim;
+        if (lim < M[e.b]) M[e.b] = lim;
+      }
       if (g < rangeNE) {
         const f = ke * (rangeNE / Math.max(g, rangeNE * 1e-9) - 1);
         F[k].x += (dx / d) * f;
@@ -248,13 +272,14 @@ export function refine(pos0: Vec[], nodes: SkNode[], edges: SkEdge[], o: SkOpts,
         F[e.b].y -= (dy / d) * f * t;
       }
     }
-    for (const [ai, bi] of ee) {
+    for (let q = 0; q < ee.length; q++) {
+      const [ai, bi] = ee[q];
       const e = edges[ai];
       const f = edges[bi];
       const c = segClosest(p[e.a], p[e.b], p[f.a], p[f.b]);
       const g = c.d - o.edgeGap;
       const lim = g / 2.2;
-      for (const v of [e.a, e.b, f.a, f.b]) if (lim < M[v]) M[v] = lim;
+      if (!dropEE.has(q)) for (const v of [e.a, e.b, f.a, f.b]) if (lim < M[v]) M[v] = lim;
       if (g < rangeEE && c.d > 1e-12) {
         const ux = (c.ax - c.bx) / c.d;
         const uy = (c.ay - c.by) / c.d;

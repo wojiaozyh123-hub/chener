@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { Command } from 'commander';
-import { applyOpsToProject, defaultExportPath, evaluate, exportAll, generate, loadProject, relayout, saveProject, type ExportPaths, type State } from './project.js';
+import { applyOpsToProject, defaultExportPath, evaluate, exportAll, generate, importDrawio, loadProject, relayout, saveProject, type ExportPaths, type State } from './project.js';
 import { summaryText } from './summary.js';
 import { defaultFamily, resolveFont } from './text/fonts.js';
 import type { Op } from './model/ops.js';
@@ -82,16 +82,38 @@ program
 
 program
   .command('layout')
-  .description('重新排布全部节点')
+  .description('重新排布：默认全部重排；--keep 是整理，拖过的位置不动、其余理顺')
   .argument('<project>')
+  .option('--keep', '整理：保留拖过（move/place、draw.io 读回）的位置')
   .option('--png [file]', '导出 PNG')
   .option('--svg [file]', '导出 SVG')
   .option('--drawio [file]', '导出 draw.io 文件')
   .option('--scale <n>', 'PNG 放大倍数')
   .option('--json', '输出 JSON')
-  .action((file: string, o: ExportFlags) => {
+  .action((file: string, o: ExportFlags & { keep?: boolean }) => {
     const abs = path.resolve(file);
-    finish(relayout(abs, loadProject(abs)), o);
+    finish(relayout(abs, loadProject(abs), !!o.keep), o);
+  });
+
+program
+  .command('import-drawio')
+  .description('读回在 draw.io 里改过的文件：位置、名字、形状、字体、基数、虚线')
+  .argument('<project>')
+  .argument('<drawio>', '.drawio 文件')
+  .option('--png [file]', '导出 PNG')
+  .option('--svg [file]', '导出 SVG')
+  .option('--scale <n>', 'PNG 放大倍数')
+  .option('--json', '输出 JSON')
+  .action((file: string, drawio: string, o: ExportFlags) => {
+    const abs = path.resolve(file);
+    const r = importDrawio(abs, loadProject(abs), fs.readFileSync(drawio, 'utf8'));
+    if (!r.state) {
+      process.stderr.write(`没有写入：\n${r.errors.map((e) => `  ✗ ${e}`).join('\n')}\n`);
+      process.exitCode = 2;
+      return;
+    }
+    process.stdout.write(`从 draw.io 读回 ${r.applied} 处修改\n${r.notes.map((n) => `  · ${n}`).join('\n')}${r.notes.length ? '\n' : ''}`);
+    finish(r.state, o);
   });
 
 program

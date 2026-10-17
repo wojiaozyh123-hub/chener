@@ -1,0 +1,127 @@
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #ffffff;
+  font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  color: #111111;
+}
+
+body.busy,
+body.busy * {
+  cursor: progress !important;
+}
+
+#start {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+}
+
+#start button {
+  font: inherit;
+  font-size: 18px;
+  padding: 14px 34px;
+  border: 1.5px solid #111111;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+#start button:hover {
+  background: #f3f3f3;
+}
+
+#canvas {
+  display: none;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  touch-action: none;
+}
+
+.node {
+  cursor: move;
+}
+
+.edge[data-kind='rel'],
+.card {
+  cursor: text;
+}
+
+.node.sel > :is(rect, polygon, ellipse) {
+  stroke: #2563eb;
+  stroke-width: 2.6;
+}
+
+.node.bad > :is(rect, polygon, ellipse) {
+  stroke: #d92d20;
+  stroke-width: 2.4;
+}
+
+.edge.bad .ln {
+  stroke: #d92d20;
+  stroke-width: 2.4;
+}
+
+.card.bad text {
+  fill: #d92d20;
+}
+
+#panel {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+  font-size: 14px;
+}
+
+#panel label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+#panel label.check {
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+#panel input:not([type='checkbox']),
+#panel select {
+  font: inherit;
+  width: 170px;
+  padding: 4px 6px;
+  border: 1px solid #c8c8c8;
+  border-radius: 4px;
+}
+
+#editor {
+  position: fixed;
+  z-index: 10;
+  text-align: center;
+  font-family: inherit;
+  padding: 2px 4px;
+  border: 1.5px solid #2563eb;
+  border-radius: 4px;
+  outline: none;
+  background: #ffffff;
+}
+
+#editor[hidden],
+#panel[hidden],
+#start[hidden] {
+  display: none;
+}

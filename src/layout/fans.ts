@@ -56,7 +56,8 @@ interface Placed {
 
 const SPOKE_LINE_GAP = 2; // 属性连线和主人的其他连线在出口附近至少隔开这么多
 
-export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: FanParams, startAngle = 200 * DEG): FanResult {
+/** fixed[i]：用户摆过的属性（相对主人中心的位置），原样保留，其余属性绕开它排。 */
+export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: FanParams, startAngle = 200 * DEG, fixed: (Vec | null)[] = []): FanResult {
   const cPoly = shapePoly(center.shape, center.w, center.h, 0, 0, 24);
   const cR = cPoly.r;
   if (!leaves.length) return { offsets: [], radius: cR, ok: true };
@@ -136,9 +137,10 @@ export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: 
   const sizes = gaps.map((g) => g.end - g.start);
   const usable = sizes.map((s) => (s >= 22 * DEG ? s : 0));
   const total = usable.reduce((a, b) => a + b, 0) || 1;
-  const raw = usable.map((s) => (s / total) * leaves.length);
+  const nFree = leaves.filter((_, i) => !fixed[i]).length;
+  const raw = usable.map((s) => (s / total) * nFree);
   const quota = raw.map(Math.floor);
-  let rest = leaves.length - quota.reduce((a, b) => a + b, 0);
+  let rest = nFree - quota.reduce((a, b) => a + b, 0);
   const order = raw.map((r, k) => [r - Math.floor(r), k] as const).sort((a, b) => b[0] - a[0]);
   for (const [, k] of order) {
     if (rest <= 0) break;
@@ -148,9 +150,22 @@ export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: 
     }
   }
 
+  const fixedPlaced = (): Placed[] =>
+    leaves.flatMap((_, i) => {
+      const f = fixed[i];
+      if (!f) return [];
+      return [{ i, theta: Math.atan2(f.y, f.x), ring: 0, c: f, poly: translatePoly(lPolys[i], f.x, f.y), gap: -1 }];
+    });
+  const free = leaves.map((_, i) => i).filter((i) => !fixed[i]);
+
   const attempt = (maxRing: number, spoke0: number): Placed[] | null => {
-    const placed: Placed[] = [];
-    let idx = 0;
+    const placed: Placed[] = fixedPlaced();
+    let k = 0; // free 里的下一个
+    let idx = free[0] ?? leaves.length;
+    const advance = () => {
+      k++;
+      idx = free[k] ?? leaves.length;
+    };
     let carry = 0;
     for (let gi = 0; gi < gaps.length && idx < leaves.length; gi++) {
       const g = gaps[gi];
@@ -168,7 +183,7 @@ export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: 
         const at = tryAt(idx, best.theta, best.ring, spoke0, placed)!;
         placed.push({ i: idx, theta: best.theta, ring: best.ring, c: at.c, poly: at.poly, gap: gi });
         cursor = best.theta;
-        idx++;
+        advance();
         got++;
       }
       carry = want - got;
@@ -187,7 +202,7 @@ export function packFan(center: FanItem, dirs: FanLine[], leaves: FanItem[], P: 
         }
       }
       if (!done) return null;
-      idx++;
+      advance();
     }
     return placed;
   };

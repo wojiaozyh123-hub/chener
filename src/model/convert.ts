@@ -301,6 +301,8 @@ export function convert(facts: FactSet, d: Decisions): ConvertResult {
   // 3. 实体
   const entities: Entity[] = [];
   const entityOf = new Map<string, Entity>();
+  // 推关系名时用实体的原始名（注释/推导出来的），不用用户改过的名：改一个名字不该牵连别的名字
+  const baseLabel = new Map<string, string>();
   const attrFrom = (t: TableFact, c: TableFact['columns'][number], key: boolean): Attribute => {
     const id = `${t.name}.${c.name}`;
     const lab = columnLabel(c);
@@ -328,6 +330,7 @@ export function convert(facts: FactSet, d: Decisions): ConvertResult {
       const ref = nameFromReferences(t.name, groups);
       if (ref) lab = { label: ref, from: 'derived' };
     }
+    baseLabel.set(t.name, lab.label);
     const e: Entity = {
       id: t.name,
       label: d.labels[t.name] ?? lab.label,
@@ -385,7 +388,7 @@ export function convert(facts: FactSet, d: Decisions): ConvertResult {
           (t.primaryKey.length === g.cols.length && g.cols.every((c) => pk.has(lower(c)))) ||
           t.uniques.some((u) => u.length === g.cols.length && u.every((c) => colsSet.has(lower(c)))) ||
           (g.cols.length === 1 && !!t.columns.find((c) => lower(c.name) === lower(g.cols[0]))?.unique);
-        const lab = fkRelLabel(t, g.cols, d.labels[target.id] ?? target.label);
+        const lab = fkRelLabel(t, g.cols, baseLabel.get(target.id) ?? target.label);
         const f = d.flags[id] ?? {};
         const identifying = e.weak && g.cols.every((c) => pk.has(lower(c))) && lower(g.target) !== lower(t.name);
         const rel: Relationship = {
@@ -422,7 +425,7 @@ export function convert(facts: FactSet, d: Decisions): ConvertResult {
       if (missing.length) {
         issues.push({ level: 'error', code: 'rel.end.not-entity', message: `关系表 ${t.name} 连到的 ${missing.map((m) => m.entity).join('、')} 不是实体（自己也被判成了关系），请用 set_table_role 把其中一个改成实体`, ids: [t.name] });
       }
-      const endLabels = ends.map((x) => entityOf.get(lower(x.entity))?.label ?? x.entity);
+      const endLabels = ends.map((x) => baseLabel.get(entityOf.get(lower(x.entity))?.id ?? '') ?? x.entity);
       const lab = joinRelLabel(t, endLabels, ends.map((x) => x.entity));
       const pk = new Set(t.primaryKey.map(lower));
       const rel: Relationship = {

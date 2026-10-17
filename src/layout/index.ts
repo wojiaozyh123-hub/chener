@@ -43,7 +43,12 @@ interface CompResult {
   forced: number[]; // free 边的下标
 }
 
-export function layoutModel(model: Model, view: View): { view: View; report: LayoutReport } {
+export interface LayoutOptions {
+  /** 整理：从当前位置出发，拖过的（pinned）节点和属性不动，其余在约束下理顺；没有位置的新节点放在邻居旁边 */
+  keep?: boolean;
+}
+
+export function layoutModel(model: Model, view: View, opts: LayoutOptions = {}): { view: View; report: LayoutReport } {
   const boxes = nodeBoxes(model, view);
   const skelIds = [...model.entities.map((e) => e.id), ...model.relationships.map((r) => r.id)];
   const index = new Map(skelIds.map((id, i) => [id, i] as const));
@@ -78,9 +83,19 @@ export function layoutModel(model: Model, view: View): { view: View; report: Lay
   skelIds.forEach((_, i) => comps.set(find(i), [...(comps.get(find(i)) ?? []), i]));
 
   const report: LayoutReport = { components: comps.size, planar: true, forcedCrossings: [], fanFailures: [] };
-  const placedComps: { ids: number[]; pos: Vec[]; fans: FanResult[]; bbox: { minX: number; minY: number; maxX: number; maxY: number } }[] = [];
+  const placedComps: { ids: number[]; pos: Vec[]; fans: FanResult[]; bbox: { minX: number; minY: number; maxX: number; maxY: number }; kept?: boolean }[] = [];
+  const at = (id: string): Vec | null => {
+    const nv = view.nodes[id];
+    return nv && nv.x !== undefined && nv.y !== undefined ? { x: nv.x, y: nv.y } : null;
+  };
 
-  for (const members of comps.values()) {
+  // 整理时，所有已经摆在画面上的分量放在一起理（互相要避让）；没有位置的分量单独新排
+  let groupsToLay: { members: number[]; keep: boolean }[] = [...comps.values()].map((m) => ({ members: m, keep: false }));
+  if (opts.keep) {
+    const keptMembers = groupsToLay.filter((g) => g.members.some((i) => at(skelIds[i]))).flatMap((g) => g.members);
+    groupsToLay = [...(keptMembers.length ? [{ members: keptMembers, keep: true }] : []), ...groupsToLay.filter((g) => !g.members.some((i) => at(skelIds[i])))];
+  }
+  for (const { members, keep } of groupsToLay) {
     const local = new Map(members.map((g, i) => [g, i] as const));
     const edges: CompEdge[] = allEdges.filter((e) => local.has(e.a)).map((e) => ({ ...e, a: local.get(e.a)!, b: local.get(e.b)! }));
     const centers: FanItem[] = members.map((g) => {
@@ -91,7 +106,10 @@ export function layoutModel(model: Model, view: View): { view: View; report: Lay
       const b = boxes.get(id)!;
       return { w: b.w, h: b.h, shape: b.shape };
     }));
-    const res = layoutComponent(members.length, edges, centers, leaves, fanParams, members.map((g) => skelIds[g]), model);
+    const ids = members.map((g) => skelIds[g]);
+    const res = keep
+      ? tidyComponent(edges, centers, leaves, fanParams, ids, model, ids.map((id) => at(id)), ids.map((id) => !!view.nodes[id]?.pinned), ids.map((id) => (leavesOf.get(id) ?? []).map((aid) => (view.nodes[aid]?.pinned ? at(aid) : null))))
+      : layoutComponent(members.length, edges, centers, leaves, fanParams, ids, model);
     for (const fi of res.forced) {
       report.planar = false;
       report.forcedCrossings.push({ relationship: edges[fi].relId, entity: edges[fi].entId });
@@ -99,20 +117,35 @@ export function layoutModel(model: Model, view: View): { view: View; report: Lay
     res.fans.forEach((f, i) => {
       if (!f.ok) report.fanFailures.push(skelIds[members[i]]);
     });
-    placedComps.push({ ids: members, pos: res.pos, fans: res.fans, bbox: compBBox(res.pos, res.fans, members.map((g) => skelIds[g]), boxes, leavesOf) });
+    placedComps.push({ ids: members, pos: res.pos, fans: res.fans, bbox: compBBox(res.pos, res.fans, ids, boxes, leavesOf), kept: keep });
   }
 
-  // 分量按面积从大到小，一行一行排
-  placedComps.sort((a, b) => area(b.bbox) - area(a.bbox));
+  // 整理时保留的分量原地不动；新排的分量按面积从大到小，一行一行排（整理时排在已有内容右边）
+  const nodes = { ...view.nodes };
+  const writeComp = (c: (typeof placedComps)[number], dx: number, dy: number, keepPins: boolean) => {
+    c.ids.forEach((g, i) => {
+      const id = skelIds[g];
+      const p = c.pos[i];
+      nodes[id] = { ...nodes[id], x: round(p.x + dx), y: round(p.y + dy), pinned: keepPins ? nodes[id]?.pinned : undefined };
+      (leavesOf.get(id) ?? []).forEach((aid, k) => {
+        const o = c.fans[i].offsets[k];
+        nodes[aid] = { ...nodes[aid], x: round(p.x + dx + o.x), y: round(p.y + dy + o.y), pinned: keepPins ? nodes[aid]?.pinned : undefined };
+      });
+    });
+  };
+  const kept = placedComps.filter((c) => c.kept);
+  for (const c of kept) writeComp(c, 0, 0, true);
+  const fresh = placedComps.filter((c) => !c.kept).sort((a, b) => area(b.bbox) - area(a.bbox));
   const GAP = 80;
-  const totalArea = placedComps.reduce((s, c) => s + area(c.bbox), 0);
-  const maxW = Math.max(...placedComps.map((c) => c.bbox.maxX - c.bbox.minX), 0);
+  const totalArea = fresh.reduce((s, c) => s + area(c.bbox), 0);
+  const maxW = Math.max(...fresh.map((c) => c.bbox.maxX - c.bbox.minX), 0);
   const rowLimit = Math.max(maxW, Math.sqrt(totalArea) * 1.6);
+  const keptMaxX = kept.length ? Math.max(...kept.map((c) => c.bbox.maxX)) + GAP : 0;
+  const keptMinY = kept.length ? Math.min(...kept.map((c) => c.bbox.minY)) : 0;
   let x = 0;
   let y = 0;
   let rowH = 0;
-  const nodes = { ...view.nodes };
-  for (const c of placedComps) {
+  for (const c of fresh) {
     const w = c.bbox.maxX - c.bbox.minX;
     const h = c.bbox.maxY - c.bbox.minY;
     if (x > 0 && x + w > rowLimit) {
@@ -120,17 +153,7 @@ export function layoutModel(model: Model, view: View): { view: View; report: Lay
       y += rowH + GAP;
       rowH = 0;
     }
-    const dx = x - c.bbox.minX;
-    const dy = y - c.bbox.minY;
-    c.ids.forEach((g, i) => {
-      const id = skelIds[g];
-      const p = c.pos[i];
-      nodes[id] = { ...nodes[id], x: round(p.x + dx), y: round(p.y + dy), pinned: undefined };
-      (leavesOf.get(id) ?? []).forEach((aid, k) => {
-        const o = c.fans[i].offsets[k];
-        nodes[aid] = { ...nodes[aid], x: round(p.x + dx + o.x), y: round(p.y + dy + o.y), pinned: undefined };
-      });
-    });
+    writeComp(c, keptMaxX + x - c.bbox.minX, keptMinY + y - c.bbox.minY, false);
     x += w + GAP;
     rowH = Math.max(rowH, h);
   }
@@ -166,9 +189,9 @@ function compBBox(pos: Vec[], fans: FanResult[], ids: string[], boxes: Map<strin
   return { minX, minY, maxX, maxY };
 }
 
-function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leaves: FanItem[][], fp: typeof FAN, ids: string[], model: Model): CompResult {
-  // 每个节点身上的连线（相对它自己中心的坐标），和最终出图用同一个 multiLines
-  const packAll = (pos: Vec[]): FanResult[] => {
+/** 每个节点身上的连线（相对它自己中心的坐标）都和最终出图用同一个 multiLines；fixedAbs 是用户摆过的属性的绝对位置。 */
+function makePackAll(edges: CompEdge[], centers: FanItem[], leaves: FanItem[][], fp: typeof FAN, fixedAbs?: (Vec | null)[][]) {
+  return (pos: Vec[]): FanResult[] => {
     const lines: FanLine[][] = centers.map(() => []);
     for (const e of edges) {
       const rb = { x: pos[e.a].x, y: pos[e.a].y, ...centers[e.a] };
@@ -178,8 +201,110 @@ function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leave
         lines[e.a].push({ a: { x: g.atR.x - rb.x, y: g.atR.y - rb.y }, b: { x: g.atE.x - rb.x, y: g.atE.y - rb.y }, angle: Math.atan2(g.atE.y - g.atR.y, g.atE.x - g.atR.x), clear: e.clear });
       }
     }
-    return centers.map((c, i) => packFan(c, lines[i], leaves[i], fp, START));
+    return centers.map((c, i) => {
+      const fixed = (fixedAbs?.[i] ?? []).map((f) => (f ? { x: f.x - pos[i].x, y: f.y - pos[i].y } : null));
+      return packFan(c, lines[i], leaves[i], fp, START, fixed);
+    });
   };
+}
+
+/** 整理：从当前位置出发。拖过的节点不动；没有位置的新节点放到已摆好的邻居旁边；开局就冲突的约束只推开、不限速。 */
+function tidyComponent(edges: CompEdge[], centers: FanItem[], leaves: FanItem[][], fp: typeof FAN, ids: string[], model: Model, start: (Vec | null)[], pinned: boolean[], fixedAbs: (Vec | null)[][]): CompResult {
+  const n = ids.length;
+  const pos: Vec[] = start.map((p) => (p ? { ...p } : { x: NaN, y: NaN }));
+  const placedPts = pos.filter((p) => !Number.isNaN(p.x));
+  const cx = placedPts.reduce((a, p) => a + p.x, 0) / Math.max(1, placedPts.length);
+  const cy = placedPts.reduce((a, p) => a + p.y, 0) / Math.max(1, placedPts.length);
+  for (let pass = 0; pass < n; pass++) {
+    let changed = false;
+    pos.forEach((p, i) => {
+      if (!Number.isNaN(p.x)) return;
+      const nb = edges.filter((e) => e.a === i || e.b === i).map((e) => (e.a === i ? e.b : e.a)).filter((j) => !Number.isNaN(pos[j].x));
+      if (!nb.length && pass < n - 1) return;
+      const bx = nb.length ? nb.reduce((a, j) => a + pos[j].x, 0) / nb.length : cx;
+      const by = nb.length ? nb.reduce((a, j) => a + pos[j].y, 0) / nb.length : cy;
+      const t = (i * 2.399) % (Math.PI * 2);
+      pos[i] = { x: bx + Math.cos(t) * 160, y: by + Math.sin(t) * 160 };
+      changed = true;
+    });
+    if (!changed && pos.every((p) => !Number.isNaN(p.x))) break;
+  }
+  const packAll = makePackAll(edges, centers, leaves, fp, fixedAbs);
+  const relIds = new Set(model.relationships.map((r) => r.id));
+  const nbrs: number[][] = Array.from({ length: n }, () => []);
+  for (const e of edges) {
+    if (!nbrs[e.a].includes(e.b)) nbrs[e.a].push(e.b);
+    if (!nbrs[e.b].includes(e.a)) nbrs[e.b].push(e.a);
+  }
+  const mkNodes = (R: number[]): SkNode[] => R.map((r, i) => ({ r, pinned: pinned[i], diamond2: relIds.has(ids[i]) && nbrs[i].length === 2 ? ([nbrs[i][0], nbrs[i][1]] as [number, number]) : undefined }));
+  const kOf = (a: number, b: number) => (a < b ? `${a},${b}` : `${b},${a}`);
+  let fans = packAll(pos);
+  let R = fans.map((f) => f.radius + 2);
+  const mk = (R: number[], free: Set<string>): SkEdge[] => edges.map((e) => ({ a: e.a, b: e.b, len: R[e.a] + R[e.b] + L0, free: free.has(kOf(e.a, e.b)) }));
+  // 拖走一个实体后，它的关系菱形还留在原地，线就交叉了。连续移动不会改变点在线的哪一侧，解不开这种交叉；
+  // 所以先让卷进交叉、没被拖过的节点“跳”到邻居中间附近：交叉变少、又不压到别的圆盘和线才接受。
+  const all = mk(R, new Set());
+  const crossCount = (P: Vec[]) => crossingPairs(P, all).length;
+  const fits = (P: Vec[], v: number) => {
+    for (let u = 0; u < n; u++) if (u !== v && Math.hypot(P[u].x - P[v].x, P[u].y - P[v].y) < R[u] + R[v] + OPTS.margin) return false;
+    for (const e of all) {
+      if (e.a === v || e.b === v) continue;
+      const ax = P[e.a].x, ay = P[e.a].y, bx = P[e.b].x, by = P[e.b].y;
+      const l2 = (bx - ax) ** 2 + (by - ay) ** 2 || 1e-9;
+      const t = Math.max(0, Math.min(1, ((P[v].x - ax) * (bx - ax) + (P[v].y - ay) * (by - ay)) / l2));
+      if (Math.hypot(P[v].x - ax - (bx - ax) * t, P[v].y - ay - (by - ay) * t) < R[v] + OPTS.edgeMargin) return false;
+    }
+    return true;
+  };
+  for (let pass = 0; pass < 4; pass++) {
+    const before = crossCount(pos);
+    if (!before) break;
+    const involved = new Set<number>();
+    for (const [i, j] of crossingPairs(pos, all)) for (const e of [all[i], all[j]]) for (const v of [e.a, e.b]) if (!pinned[v]) involved.add(v);
+    let improved = false;
+    // 关系菱形优先：它们通常是被留在原地的那个
+    for (const v of [...involved].sort((a, b) => Number(relIds.has(ids[b])) - Number(relIds.has(ids[a])))) {
+      const nb = nbrs[v];
+      if (!nb.length) continue;
+      const bx = nb.reduce((a, j) => a + pos[j].x, 0) / nb.length;
+      const by = nb.reduce((a, j) => a + pos[j].y, 0) / nb.length;
+      const cur = crossCount(pos);
+      let done = false;
+      for (const r of [0, 60, 120, 200, 320]) {
+        for (let k = 0; k < (r ? 8 : 1) && !done; k++) {
+          const t = (k / 8) * Math.PI * 2;
+          const trial = pos.slice();
+          trial[v] = { x: bx + Math.cos(t) * r, y: by + Math.sin(t) * r };
+          if (crossCount(trial) < cur && fits(trial, v)) {
+            pos[v] = trial[v];
+            done = improved = true;
+          }
+        }
+        if (done) break;
+      }
+    }
+    if (!improved) break;
+    fans = packAll(pos);
+    R = fans.map((f) => f.radius + 2);
+  }
+  // 还剩下的交叉：这些边允许交叉（守不住），其余照常不产生新交叉
+  const free = new Set<string>();
+  for (const [i, j] of crossingPairs(pos, mk(R, free))) {
+    free.add(kOf(edges[i].a, edges[i].b));
+    free.add(kOf(edges[j].a, edges[j].b));
+  }
+  let p = n > 1 ? refine(pos, mkNodes(R), mk(R, free), OPTS, 600, 0, true) : pos;
+  fans = packAll(p);
+  R = fans.map((f) => f.radius + 2);
+  if (n > 1) {
+    p = refine(p, mkNodes(R), mk(R, free), OPTS, 300, 0, true);
+    fans = packAll(p);
+  }
+  return { pos: p, fans, score: 0, forced: [] };
+}
+
+function layoutComponent(n: number, edges: CompEdge[], centers: FanItem[], leaves: FanItem[][], fp: typeof FAN, ids: string[], model: Model): CompResult {
+  const packAll = makePackAll(edges, centers, leaves, fp);
 
   if (n === 1) {
     const pos = [{ x: 0, y: 0 }];
