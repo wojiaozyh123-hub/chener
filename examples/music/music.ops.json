@@ -1,0 +1,6 @@
+[
+  { "op": "rename", "id": "fk:listening_report.user_id", "label": "生成" },
+  { "op": "add_relationship", "label": "管理", "ends": [{ "entity": "user", "card": "M" }, { "entity": "admin", "card": "N" }], "assertedBy": "user" },
+  { "op": "add_relationship", "label": "管理", "ends": [{ "entity": "admin", "card": "N" }, { "entity": "song", "card": "M" }], "assertedBy": "user" },
+  { "op": "add_relationship", "label": "管理", "ends": [{ "entity": "ai_model_config", "card": "M" }, { "entity": "admin", "card": "N" }], "assertedBy": "user" }
+]

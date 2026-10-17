@@ -1,0 +1,49 @@
+{
+  "name": "chener",
+  "version": "0.1.0",
+  "description": "从 SQL 建表语句 / SQLAlchemy 源码生成 Chen 记法 ER 图：线不交叉、字段不遗漏，带命令行和 MCP 服务",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "chener": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "grammars",
+    "examples",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p .",
+    "prepare": "tsc -p ."
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@resvg/resvg-js": "2.6.2",
+    "commander": "14.0.3",
+    "fontkit": "2.0.4",
+    "node-sql-parser": "5.4.0",
+    "web-tree-sitter": "0.27.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "5.9.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wojiaozyh123-hub/chener.git"
+  },
+  "keywords": [
+    "er-diagram",
+    "chen-notation",
+    "sql",
+    "sqlalchemy",
+    "mcp",
+    "ER图"
+  ]
+}
